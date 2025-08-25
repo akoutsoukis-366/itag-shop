@@ -33,7 +33,7 @@ return (
       <span>Subtotal</span>
       <span>€{(subtotalCents / 100).toFixed(2)}</span>
     </div>
-    <form action="/api/checkout" method="POST" className="mt-4">
+    <form action="/api/checkout/session" method="POST" className="mt-4">
       <button className="block w-full rounded bg-black px-4 py-2 text-white">Checkout</button>
     </form>
   </aside>
