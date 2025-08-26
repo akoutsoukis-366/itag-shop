@@ -18,7 +18,7 @@ return { secret, whSecret };
 export async function POST(req: Request) {
 const requestId = getRequestId(req);
 
-// Rate limit early for bursts
+// Light rate limit
 const xff = req.headers.get("x-forwarded-for") ?? "";
 const [first] = xff.split(",");
 const ip =
@@ -27,11 +27,7 @@ const ip =
 "unknown";
 
 const key = compositeKey([pathKey("/api/stripe/webhook"), ipKey(ip)]);
-const rl = rateLimitTry(key, {
-capacity: 60,
-refillTokens: 60,
-refillIntervalMs: 60_000,
-});
+const rl = rateLimitTry(key, { capacity: 60, refillTokens: 60, refillIntervalMs: 60_000 });
 if (!rl.allowed) {
 return new NextResponse("Too many requests", {
 status: 429,
@@ -44,9 +40,9 @@ headers: {
 });
 }
 
+// Init Stripe + verify signature
 let stripe: Stripe;
 let whSecret: string;
-
 try {
 const env = ensureEnv();
 stripe = new Stripe(env.secret);
@@ -73,7 +69,7 @@ headers: { "x-request-id": requestId },
 });
 }
 
-// DB-backed idempotency using ProcessedEvent model (id = event.id)
+// DB idempotency
 try {
 await prisma.processedEvent.create({
 data: { id: event.id, type: event.type },
@@ -108,7 +104,7 @@ const session = event.data.object as Stripe.Checkout.Session;
         Boolean((session.payment_intent as Stripe.PaymentIntent | null)?.id),
     });
 
-    const cartId = session.metadata?.cartId;
+    const cartId = session.metadata?.cartId as string | undefined;
     if (!cartId) {
       logWarn("No cartId in session metadata", { requestId, sessionId: session.id });
       break;
@@ -137,10 +133,9 @@ const session = event.data.object as Stripe.Checkout.Session;
           return;
         }
 
-        // Compute totals and line items snapshot
+        // Compute totals and snapshot items
         let subtotalCents = 0;
         let taxCents = 0;
-
         const orderItemsCreate = cart.items.map((it) => {
           const v = it.variant;
           const p = v.product;
@@ -168,7 +163,7 @@ const session = event.data.object as Stripe.Checkout.Session;
         const shippingCents = 0;
         const totalCents = subtotalCents + taxCents + shippingCents;
 
-        // Decrement stock (guard against negative)
+        // Stock decrement with negative guard
         for (const it of cart.items) {
           const v = it.variant;
           if (v.stockQty != null) {
@@ -183,11 +178,21 @@ const session = event.data.object as Stripe.Checkout.Session;
           }
         }
 
-        // Extract payment intent id if present
+        // PaymentIntent
         const paymentIntentId =
           typeof session.payment_intent === "string"
             ? (session.payment_intent as string)
             : (session.payment_intent as Stripe.PaymentIntent | null)?.id ?? null;
+
+        // Prefer Cart-saved delivery details, fallback to Stripe session
+        const cd = session.customer_details;
+        const shippingName = cart.shippingName ?? cd?.name ?? "N/A";
+        const shippingPhone = cart.shippingPhone ?? cd?.phone ?? null;
+        const shippingAddr1 = cart.shippingAddr1 ?? cd?.address?.line1 ?? "N/A";
+        const shippingAddr2 = cart.shippingAddr2 ?? cd?.address?.line2 ?? null;
+        const shippingCity = cart.shippingCity ?? cd?.address?.city ?? "N/A";
+        const shippingPost = cart.shippingPost ?? cd?.address?.postal_code ?? "N/A";
+        const shippingCountry = cart.shippingCountry ?? cd?.address?.country ?? "GR";
 
         await tx.order.create({
           data: {
@@ -202,13 +207,13 @@ const session = event.data.object as Stripe.Checkout.Session;
             shippingCents,
             totalCents,
 
-            shippingName: session.customer_details?.name ?? "N/A",
-            shippingPhone: session.customer_details?.phone ?? null,
-            shippingAddr1: session.customer_details?.address?.line1 ?? "N/A",
-            shippingAddr2: session.customer_details?.address?.line2 ?? null,
-            shippingCity: session.customer_details?.address?.city ?? "N/A",
-            shippingPost: session.customer_details?.address?.postal_code ?? "N/A",
-            shippingCountry: session.customer_details?.address?.country ?? "GR",
+            shippingName,
+            shippingPhone,
+            shippingAddr1,
+            shippingAddr2,
+            shippingCity,
+            shippingPost,
+            shippingCountry,
             billingSameAsShipping: true,
 
             stripeSessionId: session.id,
@@ -218,6 +223,7 @@ const session = event.data.object as Stripe.Checkout.Session;
           },
         });
 
+        // Clear cart items (cookie cleared on success page)
         await tx.cartItem.deleteMany({ where: { cartId } });
       });
 
@@ -227,7 +233,7 @@ const session = event.data.object as Stripe.Checkout.Session;
         sessionId: session.id,
       });
 
-      // Send order confirmation email (best-effort, non-blocking)
+      // Best-effort email
       const email = (event.data.object as Stripe.Checkout.Session).customer_details?.email;
       if (email) {
         sendEmail({
@@ -323,8 +329,7 @@ const session = event.data.object as Stripe.Checkout.Session;
       });
       const refunded = agg._sum.amountCents ?? 0;
 
-      const nextStatus =
-        refunded >= order.totalCents ? "REFUNDED" : "PARTIALLY_REFUNDED";
+      const nextStatus = refunded >= order.totalCents ? "REFUNDED" : "PARTIALLY_REFUNDED";
 
       if (order.paymentStatus !== nextStatus) {
         await tx.order.update({
@@ -341,6 +346,7 @@ const session = event.data.object as Stripe.Checkout.Session;
       amountCents,
       orderId: order.id,
     });
+
     break;
   }
 

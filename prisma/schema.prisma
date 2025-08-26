@@ -77,6 +77,14 @@ model Cart {
   currency   String     @default("EUR")
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
+  shippingName String?
+  shippingPhone String?
+  shippingAddr1 String?
+  shippingAddr2 String?
+  shippingCity String?
+  shippingPost String?
+  shippingCountry String?
+
 }
 
 model CartItem {
@@ -101,13 +109,13 @@ model Order {
   taxCents              Int
   shippingCents         Int
   totalCents            Int
-  shippingName          String
+  shippingName          String?
   shippingPhone         String?
-  shippingAddr1         String
+  shippingAddr1         String?
   shippingAddr2         String?
-  shippingCity          String
-  shippingPost          String
-  shippingCountry       String        @default("GR")
+  shippingCity          String?
+  shippingPost          String?
+  shippingCountry       String?       @default("GR")
   billingSameAsShipping Boolean       @default(true)
   lineItems             OrderItem[]
   createdAt             DateTime      @default(now())
