@@ -1,27 +1,33 @@
-import { NextResponse } from "next/server"; // Route Handler utilities
-import { cookies } from "next/headers"; // Server-side cookie API
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 export async function GET(req: Request) {
-const url = new URL(req.url); // current request URL
+const url = new URL(req.url);
+const sid = url.searchParams.get("session_id") || "";
 
-const sid = url.searchParams.get("session_id") || ""; // session id
+const jar = await cookies();
 
-const jar = await cookies(); // cookie jar
-
-// Delete cart_id robustly
-
-jar.delete("cart_id"); // framework delete
+// 1) Remove the existing cart cookie (robust: delete + expired overwrite)
+jar.delete("cart_id");
 jar.set("cart_id", "", {
-path: "/", // match original path
-httpOnly: true, // mirror original
-sameSite: "lax", // mirror original
-secure: false, // localhost; use true on HTTPS
+path: "/",
+httpOnly: true,
+sameSite: "lax",
+secure: false, // set true in production over HTTPS
 expires: new Date(0),
 maxAge: 0,
-}); //
+});
 
-// IMPORTANT: backticks here ↓↓↓
-const back = new URL(`/checkout/success?session_id=${encodeURIComponent(sid)}`, url.origin); //
+// 2) Set a short-lived flag so the success page doesn’t immediately recreate a cart
+jar.set("just_paid", "1", {
+path: "/",
+httpOnly: true, // server-only; flip to false if a client component must read it
+sameSite: "lax",
+secure: false, // set true in production over HTTPS
+maxAge: 60, // 60 seconds is enough to cover the success view
+});
 
-return NextResponse.redirect(back); // 302
+// 3) Redirect back to the success page with the same session id
+const back = new URL(`/checkout/success?session_id=${encodeURIComponent(sid)}`, url.origin);
+return NextResponse.redirect(back);
 }

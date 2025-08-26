@@ -1,8 +1,10 @@
-export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic"; // fresh order data on redirect
 
 import Link from "next/link";
-import { loadOrderForSuccess } from "./actions";
-import AutoClear from "./AutoClear"; // client component runs useEffect
+import { loadOrderForSuccess } from "./actions"; // server loader by session id
+
+import AutoClear from "./AutoClear"; // client: clears cart cookie via route
+import ReceiptActions from "./ReceiptActions"; // client: receipt link/email
 
 type SP = { session_id?: string };
 
@@ -11,10 +13,10 @@ searchParams,
 }: {
 searchParams: Promise<SP>;
 }) {
-const { session_id } = await searchParams;
+const { session_id } = await searchParams; // from success_url
 
-const order = session_id ? await loadOrderForSuccess(session_id) : null;
-const pending = !!session_id && !order;
+const order = session_id ? await loadOrderForSuccess(session_id) : null; // DB load
+const pending = !!session_id && !order; // small webhook window
 
 return (
 <div className="mx-auto max-w-3xl p-8">
@@ -24,7 +26,8 @@ return (
 ? "Finalizing your order. This may take a few seconds..."
 : "Thanks! Your order has been recorded. A confirmation email will follow."}
 </p>
-  {order && session_id ? <AutoClear sessionId={session_id} /> : null} {/* triggers clear route once */}[1][2]
+  {/* Auto-clear cart cookie once order exists */}
+  {order && session_id ? <AutoClear sessionId={session_id} /> : null} {/* cookie mutation via Route Handler  */}[5][6]
 
   {order ? (
     <div className="mt-6 rounded border p-4">
@@ -35,9 +38,7 @@ return (
         </div>
         <div className="text-right">
           <div className="text-sm text-gray-500">Total</div>
-          <div className="text-xl font-semibold">
-            €{(order.totalCents / 100).toFixed(2)}
-          </div>
+          <div className="text-xl font-semibold">€{(order.totalCents / 100).toFixed(2)}</div>
         </div>
       </div>
 
@@ -46,8 +47,7 @@ return (
         <ul className="mt-2 list-disc pl-5">
           {order.lineItems.map((li: any) => (
             <li key={li.id} className="text-sm">
-              {li.title} × {li.quantity} — €
-              {(li.unitCents / 100).toFixed(2)}
+              {li.title} × {li.quantity} — €{(li.unitCents / 100).toFixed(2)}
             </li>
           ))}
         </ul>
@@ -70,20 +70,15 @@ return (
         </div>
 
         <div>
-          <div className="text-sm text-gray-500">
-            Subtotal €{(order.subtotalCents / 100).toFixed(2)}
-          </div>
-          <div className="text-sm text-gray-500">
-            Tax €{(order.taxCents / 100).toFixed(2)}
-          </div>
-          <div className="text-sm text-gray-500">
-            Shipping €{(order.shippingCents / 100).toFixed(2)}
-          </div>
-          <div className="text-base font-semibold">
-            Total €{(order.totalCents / 100).toFixed(2)}
-          </div>
+          <div className="text-sm text-gray-500">Subtotal €{(order.subtotalCents / 100).toFixed(2)}</div>
+          <div className="text-sm text-gray-500">Tax €{(order.taxCents / 100).toFixed(2)}</div>
+          <div className="text-sm text-gray-500">Shipping €{(order.shippingCents / 100).toFixed(2)}</div>
+          <div className="text-base font-semibold">Total €{(order.totalCents / 100).toFixed(2)}</div>
         </div>
       </div>
+
+      {/* Receipt actions */}
+      {session_id ? <ReceiptActions sessionId={session_id} /> : null} {/* view/email receipt via Stripe  */}[3]
     </div>
   ) : null}
 
