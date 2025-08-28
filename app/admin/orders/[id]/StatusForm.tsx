@@ -9,11 +9,11 @@ const [saving, setSaving] = useState(false);
 
 async function save() {
 setSaving(true);
-await fetch(`/admin/orders/${orderId}/status, {
+await fetch(`/admin/orders/${orderId}/status`, {
 method: "POST",
 headers: { "Content-Type": "application/json" },
 body: JSON.stringify({ status: value.trim().toUpperCase() }),
-}`);
+});
 window.location.reload();
 }
 
