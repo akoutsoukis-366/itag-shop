@@ -1,10 +1,10 @@
-export const dynamic = "force-dynamic"; // fresh order data on redirect
+export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { loadOrderForSuccess } from "./actions"; // server loader by session id
-
-import AutoClear from "./AutoClear"; // client: clears cart cookie via route
-import ReceiptActions from "./ReceiptActions"; // client: receipt link/email
+import { loadOrderForSuccess } from "./actions";
+import AutoClear from "./AutoClear";
+import ReceiptActions from "./ReceiptActions";
+import RedirectCountdown from "./RedirectCountdown";
 
 type SP = { session_id?: string };
 
@@ -13,10 +13,9 @@ searchParams,
 }: {
 searchParams: Promise<SP>;
 }) {
-const { session_id } = await searchParams; // from success_url
-
-const order = session_id ? await loadOrderForSuccess(session_id) : null; // DB load
-const pending = !!session_id && !order; // small webhook window
+const { session_id } = await searchParams;
+const order = session_id ? await loadOrderForSuccess(session_id) : null;
+const pending = !!session_id && !order;
 
 return (
 <div className="mx-auto max-w-3xl p-8">
@@ -26,8 +25,9 @@ return (
 ? "Finalizing your order. This may take a few seconds..."
 : "Thanks! Your order has been recorded. A confirmation email will follow."}
 </p>
-  {/* Auto-clear cart cookie once order exists */}
-  {order && session_id ? <AutoClear sessionId={session_id} /> : null} {/* cookie mutation via Route Handler  */}[5][6]
+  {order && session_id ? <AutoClear sessionId={session_id} /> : null}
+
+  <RedirectCountdown to="/" seconds={10} />
 
   {order ? (
     <div className="mt-6 rounded border p-4">
@@ -38,7 +38,9 @@ return (
         </div>
         <div className="text-right">
           <div className="text-sm text-gray-500">Total</div>
-          <div className="text-xl font-semibold">€{(order.totalCents / 100).toFixed(2)}</div>
+          <div className="text-xl font-semibold">
+            €{(order.totalCents / 100).toFixed(2)}
+          </div>
         </div>
       </div>
 
@@ -70,15 +72,22 @@ return (
         </div>
 
         <div>
-          <div className="text-sm text-gray-500">Subtotal €{(order.subtotalCents / 100).toFixed(2)}</div>
-          <div className="text-sm text-gray-500">Tax €{(order.taxCents / 100).toFixed(2)}</div>
-          <div className="text-sm text-gray-500">Shipping €{(order.shippingCents / 100).toFixed(2)}</div>
-          <div className="text-base font-semibold">Total €{(order.totalCents / 100).toFixed(2)}</div>
+          <div className="text-sm text-gray-500">
+            Subtotal €{(order.subtotalCents / 100).toFixed(2)}
+          </div>
+          <div className="text-sm text-gray-500">
+            Tax €{(order.taxCents / 100).toFixed(2)}
+          </div>
+          <div className="text-sm text-gray-500">
+            Shipping €{(order.shippingCents / 100).toFixed(2)}
+          </div>
+          <div className="text-base font-semibold">
+            Total €{(order.totalCents / 100).toFixed(2)}
+          </div>
         </div>
       </div>
 
-      {/* Receipt actions */}
-      {session_id ? <ReceiptActions sessionId={session_id} /> : null} {/* view/email receipt via Stripe  */}[3]
+      {session_id ? <ReceiptActions sessionId={session_id} /> : null}
     </div>
   ) : null}
 

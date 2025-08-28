@@ -1,32 +1,34 @@
 "use server";
 
-import { cookies } from "next/headers";
-
+import { unstable_noStore as noStore } from "next/cache";
 import { prisma } from "../../../lib/db";
+import Stripe from "stripe";
 
-// Clears cart_id only if an Order with this session exists
-export async function clearCartCookieIfOrderExists(formData: FormData) {
-const sessionId = String(formData.get("sessionId") || "");
-
-if (!sessionId) return false;
-const exists = await prisma.order.findFirst({
-where: { stripeSessionId: sessionId },
-select: { id: true },
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+apiVersion: "2024-12-18.acacia",
 });
-if (!exists) return false;
-const jar = await cookies();
-jar.set("cart_id", "", { path: "/", maxAge: 0 });
-return true;
 
-
-}
-
-// Loads the order and its line items for the success page UI
 export async function loadOrderForSuccess(sessionId: string) {
-if (!sessionId) return null;
+noStore();
 
-return prisma.order.findFirst({
+// First by session ID (non-unique)
+let order = await prisma.order.findFirst({
 where: { stripeSessionId: sessionId },
 include: { lineItems: true },
 });
+if (order) return order;
+
+// Fallback by PaymentIntent id
+try {
+const s = await stripe.checkout.sessions.retrieve(sessionId);
+const piId = typeof s.payment_intent === "string" ? s.payment_intent : s.payment_intent?.id;
+if (!piId) return null;
+order = await prisma.order.findFirst({
+where: { stripePaymentIntentId: piId },
+include: { lineItems: true },
+});
+return order ?? null;
+} catch {
+return null;
+}
 }
