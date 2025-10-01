@@ -14,97 +14,35 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  orders       Order[]
+  Order        Order[]
 }
 
 model Product {
-  id          String         @id @default(cuid())
-  slug        String         @unique
-  title       String
-  subtitle    String?
-  description String?
-  status      ProductStatus  @default(DRAFT)
-  category    String         @default("i-tags")
-  brand       String?        @default("Hyperloq")
-  images      ProductImage[]
-  variants    Variant[]
-  specs       Json?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  seoTitle    String?
-  seoDesc     String?
-}
+  id           String         @id @default(cuid())
+  slug         String         @unique
+  title        String
+  subtitle     String?
+  description  String?
+  status       ProductStatus  @default(DRAFT)
+  category     String         @default("i-tags")
+  brand        String?        @default("Hyperloq")
+  specs        Json?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  seoTitle     String?
+  seoDesc      String?
+  ProductImage ProductImage[]
+  variants     Variant[]
 
-model ProductImage {
-  id        String  @id @default(cuid())
-  productId String
-  url       String
-  alt       String?
-  width     Int?
-  height    Int?
-  sort      Int     @default(0)
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-}
-
-model Variant {
-  id             String  @id @default(cuid())
-  productId      String
-  sku            String  @unique
-  title          String
-  color          String?
-  packSize       Int?
-  priceCents     Int
-  currency       String  @default("EUR")
-  vatRate        Decimal @default(24.0)
-  compareAtCents Int?
-  weightGrams    Int?
-  stockQty       Int     @default(0)
-  isDefault      Boolean @default(false)
-  product        Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  // Back-relations
-  cartItems  CartItem[]  @relation("CartItemVariant")
-  orderItems OrderItem[] @relation("OrderItemVariant")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Cart {
-  id         String     @id @default(cuid())
-  customerId String?
-  items      CartItem[]
-  currency   String     @default("EUR")
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  shippingName String?
-  shippingPhone String?
-  shippingAddr1 String?
-  shippingAddr2 String?
-  shippingCity String?
-  shippingPost String?
-  shippingCountry String?
-
-}
-
-model CartItem {
-  id        String @id @default(cuid())
-  cartId    String
-  variantId String
-  quantity  Int    @default(1)
-  unitCents Int
-
-  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  variant Variant @relation("CartItemVariant", fields: [variantId], references: [id])
+  @@map("products")
 }
 
 model Order {
-  id                    String         @id @default(cuid())
+  id                    String        @id @default(cuid())
   customerId            String?
   email                 String
-  status                String         
-  paymentStatus         PaymentStatus  @default(UNPAID)
-  currency              String         @default("EUR")
+  paymentStatus         PaymentStatus @default(UNPAID)
+  currency              String        @default("EUR")
   subtotalCents         Int
   taxCents              Int
   shippingCents         Int
@@ -117,16 +55,19 @@ model Order {
   shippingPost          String?
   shippingCountry       String?       @default("GR")
   billingSameAsShipping Boolean       @default(true)
-  lineItems             OrderItem[]
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
-  user                  User?         @relation(fields: [customerId], references: [id])
-  stripeSessionId       String        @unique
   stripePaymentIntentId String?       @unique
-  refunds               Refund[]
-  carrier               String? 
+  stripeSessionId       String        @unique
+  carrier               String?
   trackingNumber        String?
-  trackingUrl          String?
+  trackingUrl           String?
+  status                String
+  emailConfirmationSent Boolean @default(false)
+  User                  User?         @relation(fields: [customerId], references: [id])
+  orderEvents           OrderEvent[]
+  orderItems            OrderItem[]
+  refunds               Refund[]
 }
 
 model OrderItem {
@@ -138,29 +79,19 @@ model OrderItem {
   quantity  Int
   unitCents Int
   vatRate   Decimal
-
-  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant Variant @relation("OrderItemVariant", fields: [variantId], references: [id])
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  Variant   Variant @relation(fields: [variantId], references: [id])
 }
 
-enum ProductStatus {
-  DRAFT
-  ACTIVE
-  ARCHIVED
-}
-
-
-enum OrderStatus {
-PENDING
-// existing values…
-SHIPPED
-DELIVERED
-}
-
-model ProcessedEvent {
-  id        String   @id
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  actor     String?
   type      String
+  before    Json?
+  after     Json?
   createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model Refund {
@@ -173,22 +104,100 @@ model Refund {
   order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
+model Audit {
+  id          String   @id
+  type        String
+  orderId     String?
+  amountCents Int?
+  actorType   String?
+  actorId     String?
+  ip          String?
+  userAgent   String?
+  meta        Json?
+  createdAt   DateTime @default(now())
+}
+
+model Cart {
+  id              String     @id
+  customerId      String?
+  currency        String     @default("EUR")
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime
+  shippingAddr1   String?
+  shippingAddr2   String?
+  shippingCity    String?
+  shippingCountry String?
+  shippingName    String?
+  shippingPhone   String?
+  shippingPost    String?
+  CartItem        CartItem[]
+}
+
+model CartItem {
+  id        String  @id
+  cartId    String
+  variantId String
+  quantity  Int     @default(1)
+  unitCents Int
+  Cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  Variant   Variant @relation(fields: [variantId], references: [id])
+}
+
+model ProcessedEvent {
+  id        String   @id
+  type      String
+  createdAt DateTime @default(now())
+}
+
+model ProductImage {
+  id        String  @id
+  productId String
+  url       String
+  alt       String?
+  width     Int?
+  height    Int?
+  sort      Int     @default(0)
+  Product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Variant {
+  id             String      @id
+  productId      String
+  sku            String      @unique
+  title          String
+  color          String?
+  packSize       Int?
+  priceCents     Int
+  currency       String      @default("EUR")
+  vatRate        Decimal     @default(24.0)
+  compareAtCents Int?
+  weightGrams    Int?
+  stockQty       Int         @default(0)
+  isDefault      Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime
+  CartItem       CartItem[]
+  OrderItem      OrderItem[]
+  Product        Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("variants")
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum OrderStatus {
+  PENDING
+  SHIPPED
+  DELIVERED
+}
+
 enum PaymentStatus {
   UNPAID
   PAID
   REFUNDED
   PARTIALLY_REFUNDED
-}
-
-model Audit {
-id String @id @default(cuid())
-type String // e.g., "REFUND_REQUEST"
-orderId String?
-amountCents Int?
-actorType String? // e.g., "ADMIN_API"
-actorId String?
-ip String?
-userAgent String?
-meta Json?
-createdAt DateTime @default(now())
 }

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" style="margin:0;padding:0">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Order {{orderId}} confirmation</title>
+    <style>
+      .wrapper { width:100%; background:#f5f7fa; padding:24px 0; }
+      .container { max-width:640px; margin:0 auto; background:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+      .header { background:#111827; color:#ffffff; padding:20px 24px; font-family:Arial, Helvetica, sans-serif; }
+      .content { padding:24px; font-family:Arial, Helvetica, sans-serif; color:#111827; }
+      .h1 { font-size:20px; margin:0 0 8px 0; }
+      .p { margin:0 0 16px 0; line-height:1.5; font-size:14px; color:#374151; }
+      .section-title { font-size:16px; font-weight:bold; margin:24px 0 8px 0; }
+      .box { border:1px solid #e5e7eb; border-radius:6px; padding:12px; }
+      .item { display:flex; justify-content:space-between; font-size:14px; padding:6px 0; border-bottom:1px solid #f3f4f6; }
+      .item:last-child { border-bottom:none; }
+      .muted { color:#6b7280; font-size:12px; }
+      .total { font-weight:bold; }
+      .btn { display:inline-block; padding:10px 14px; background:#111827; color:#fff !important; text-decoration:none; border-radius:6px; font-size:14px; }
+      .footer { padding:16px 24px; font-family:Arial, Helvetica, sans-serif; color:#6b7280; font-size:12px; }
+      @media (max-width: 480px) {
+        .content { padding:16px; }
+        .header { padding:16px; }
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background:#f5f7fa">
+    <div class="wrapper" style="width:100%;background:#f5f7fa;padding:24px 0">
+      <div class="container" style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+        <div class="header" style="background:#111827;color:#ffffff;padding:20px 24px;font-family:Arial, Helvetica, sans-serif">
+          <div style="font-size:16px;font-weight:bold">Order confirmation</div>
+          <div class="muted" style="color:#9ca3af;font-size:12px;margin-top:4px">Order {{orderId}}</div>
+        </div>
+
+        <div class="content" style="padding:24px;font-family:Arial, Helvetica, sans-serif;color:#111827">
+          <h1 class="h1" style="font-size:20px;margin:0 0 8px 0">Thanks for your purchase!</h1>
+          <p class="p" style="margin:0 0 16px 0;line-height:1.5;font-size:14px;color:#374151">
+            This email confirms we received the order below. A separate email will include tracking details once your package ships.
+          </p>
+
+          <div class="section-title" style="font-size:16px;font-weight:bold;margin:24px 0 8px 0">Order summary</div>
+          <div class="box" style="border:1px solid #e5e7eb;border-radius:6px;padding:12px">
+            <!--ITEMS_HTML-->
+            <div class="item total" style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-bottom:none;font-weight:bold">
+              <div>Total</div>
+              <div>€{{total}}</div>
+            </div>
+          </div>
+
+          <div class="section-title" style="font-size:16px;font-weight:bold;margin:24px 0 8px 0">Shipping address</div>
+          <div class="box" style="border:1px solid #e5e7eb;border-radius:6px;padding:12px">
+            <!--SHIPPING_BLOCK-->
+          </div>
+
+          <div style="margin-top:20px">
+            <a href="{{storeUrl}}" class="btn" style="display:inline-block;padding:10px 14px;background:#111827;color:#fff !important;text-decoration:none;border-radius:6px;font-size:14px">Visit store</a>
+          </div>
+
+          <p class="p" style="margin:16px 0 0 0;line-height:1.5;font-size:14px;color:#374151">
+            If any detail is incorrect, reply to this email and the team will help.
+          </p>
+        </div>
+
+        <div class="footer" style="padding:16px 24px;font-family:Arial, Helvetica, sans-serif;color:#6b7280;font-size:12px">
+          <div>Hyperloq</div>
+          <div>© {{year}} All rights reserved.</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

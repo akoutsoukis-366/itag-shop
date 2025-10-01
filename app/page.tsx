@@ -3,9 +3,9 @@ import Link from "next/link";
 
 export default async function HomePage() {
 const products = await prisma.product.findMany({
-where: { status: "ACTIVE" },
-include: { variants: true },
-take: 3,
+  where: { status: "ACTIVE" },
+  include: { variants: true }, // same as your code, now valid
+  take: 3,
 });
 
 return (

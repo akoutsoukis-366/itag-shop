@@ -1,0 +1,6 @@
+Hello,
+Your order {{orderId}} has shipped.
+Carrier: {{carrier}}
+Tracking number: {{trackingNumber}}
+{{ IF trackingUrl }}Track your package: {{trackingUrl}}{{ END }}
+Thank you!

@@ -1,49 +1,61 @@
-import { prisma } from "../../../lib/db";
-import { notFound } from "next/navigation";
-import { addToCartFromForm } from "../../cart/actions";
+// app/products/[slug]/page.tsx
+import { prisma } from "@/lib/db";
+import AddToCartClient from "./AddToCartClient";
 
-// Opt out of the Full Route Cache so manual DB changes show immediately.
-export const dynamic = "force-dynamic";
+type Props = { params: Promise<{ slug: string }> };
 
-// If preferred, you can use ISR-style: export const revalidate = 0;
-// or a timed revalidate: export const revalidate = 60;
+export default async function ProductPage(props: Props) {
+  const { slug } = await props.params;
 
-type PageParams = { slug: string };
+  const product = await prisma.product.findUnique({
+    where: { slug },
+    include: { ProductImage: true, variants: true },
+  });
 
-export default async function ProductPage(props: { params: Promise<PageParams> }) {
-// Next 15: params is async
-const { slug } = await props.params;
+  if (!product) return <div className="p-6">Not found</div>;
 
-const product = await prisma.product.findUnique({
-where: { slug },
-include: { images: true, variants: true },
-});
+  const images = product.ProductImage ?? [];
+  const defaultVariant =
+    product.variants.find((v) => v.isDefault) ?? product.variants[0] ?? null;
 
-// Guard: only show ACTIVE products with at least one variant
-if (!product || product.status !== "ACTIVE") return notFound();
+  return (
+    <main className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-semibold">{product.title}</h1>
+      {product.subtitle && <p className="text-gray-600 mt-1">{product.subtitle}</p>}
 
-if (!product.variants.length) return notFound();
+      <section className="mt-6 grid gap-6 md:grid-cols-2">
+        <div>
+          {images[0] ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={images[0].url} alt={images[0].alt ?? ""} className="rounded border" />
+          ) : (
+            <div className="h-64 rounded border bg-gray-50" />
+          )}
+        </div>
 
-const defaultVariant = product.variants.find((v: any) => v.isDefault) ?? product.variants;
+        <div>
+          {defaultVariant ? (
+            <>
+              <div className="text-lg">
+                €{(defaultVariant.priceCents / 100).toFixed(2)}{" "}
+                <span className="text-sm text-gray-500">
+                  VAT {defaultVariant.vatRate.toString()}%
+                </span>
+              </div>
 
-return (
-<div className="grid gap-8 md:grid-cols-2">
-<div>
-<div className="aspect-square w-full rounded bg-gray-100" />
-</div>
-<div>
-<h1 className="text-3xl font-bold">{product.title}</h1>
-{product.subtitle ? <p className="mt-2 text-gray-600">{product.subtitle}</p> : null}
-    <div className="mt-4 text-2xl font-semibold">
-      €{((defaultVariant as any).priceCents / 100).toFixed(2)}
-    </div>
+              {/* Same server action, enhanced with client confirmation */}
+              {/* @ts-expect-error Server/Client boundary */}
+              <AddToCartClient defaultVariantId={defaultVariant.id} />
+            </>
+          ) : (
+            <div className="text-gray-500">No variants available</div>
+          )}
 
-    <form action={addToCartFromForm} className="mt-6">
-      <input type="hidden" name="variantId" value={(defaultVariant as any).id} />
-      <input type="hidden" name="quantity" value="1" />
-      <button className="w-full rounded bg-black px-4 py-2 text-white">Add to cart</button>
-    </form>
-  </div>
-</div>
-);
+          {product.description && (
+            <div className="prose mt-4 whitespace-pre-wrap">{product.description}</div>
+          )}
+        </div>
+      </section>
+    </main>
+  );
 }

@@ -1,42 +1,54 @@
-    "use client";
+"use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import CartRow from "./CartRow";
 
-type Row = { id: string; title: string; unitCents: number; quantity: number; variantId?: string };
+type Row = {
+  id: string;
+  title: string;
+  unitCents: number;
+  quantity: number;
+  variantId?: string;
+};
+
+function formatEUR(cents: number) {
+  return `€${(cents / 100).toFixed(2)}`;
+}
 
 export default function CartShell({ rows }: { rows: Row[] }) {
-const [list, setList] = useState(rows);
+  const safeRows = Array.isArray(rows) ? rows : [];
 
-const subtotalCents = useMemo(
-() => list.reduce((s, r) => s + r.unitCents * r.quantity, 0),
-[list]
-);
+  const subtotalCents = useMemo(
+    () => safeRows.reduce((sum, r) => sum + r.unitCents * r.quantity, 0),
+    [safeRows]
+  );
 
-function handleRowChange(update: { id: string; quantity: number; lineCents: number }) {
-setList(prev => prev.map(r => (r.id === update.id ? { ...r, quantity: update.quantity } : r)));
-}
+  // CartRow already calls server actions; callbacks are required by its props
+  const onChange = (_: { id: string; quantity: number; lineCents: number }) => {};
+  const onRemove = (_: string) => {};
 
-function handleRowRemove(id: string) {
-setList(prev => prev.filter(r => r.id !== id));
-}
+  return (
+    <div className="space-y-6">
+      <div className="divide-y rounded border">
+        {safeRows.map((r) => (
+          <CartRow key={r.id} row={r} onChange={onChange} onRemove={onRemove} />
+        ))}
+      </div>
 
-return (
-<div className="grid gap-6 md:grid-cols-[2fr_1fr]">
-<div className="space-y-4">
-{list.map(r => (
-<CartRow key={r.id} row={r} onChange={handleRowChange} onRemove={handleRowRemove} />
-))}
-</div>
-  <aside className="rounded border p-4">
-    <div className="mb-2 flex justify-between">
-      <span>Subtotal</span>
-      <span>€{(subtotalCents / 100).toFixed(2)}</span>
+      <div className="flex items-center justify-end gap-6">
+        <div className="text-lg font-semibold">Subtotal</div>
+        <div className="text-lg">{formatEUR(subtotalCents)}</div>
+      </div>
+
+      <div className="flex justify-end">
+        <a
+          href="/checkout/details"
+          className="rounded bg-black px-6 py-3 text-white disabled:opacity-60"
+          aria-disabled={safeRows.length === 0}
+        >
+          Checkout
+        </a>
+      </div>
     </div>
-    <form action="/checkout/details" method="POST" className="mt-4">
-      <button className="block w-full rounded bg-black px-4 py-2 text-white">Checkout</button>
-    </form>
-  </aside>
-</div>
-);
+  );
 }

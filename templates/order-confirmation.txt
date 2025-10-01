@@ -1,0 +1,17 @@
+Order {{orderId}} confirmation
+
+Thanks for your purchase! This email confirms we received the order below.
+A separate email will include tracking details once your package ships.
+
+Order summary
+-------------
+{{itemsText}}
+
+Total: €{{total}}
+
+Visit store: {{storeUrl}}
+
+If any detail is incorrect, reply to this email and the team will help.
+
+Hyperloq
+© {{year}} All rights reserved.
