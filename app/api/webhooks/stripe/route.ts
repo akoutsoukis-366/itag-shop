@@ -45,13 +45,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ ignored: true });
   }
 
-  const session = event.type === "checkout.session.completed" ? (event.data.object as Stripe.Checkout.Session) : undefined;
-  const pi = event.type === "payment_intent.succeeded" ? (event.data.object as Stripe.PaymentIntent) : undefined;
+  const session =
+    event.type === "checkout.session.completed"
+      ? (event.data.object as Stripe.Checkout.Session)
+      : undefined;
+  const pi =
+    event.type === "payment_intent.succeeded"
+      ? (event.data.object as Stripe.PaymentIntent)
+      : undefined;
 
+  // Pull reliable identifiers
   const email =
-    session?.customer_details?.email
-    ?? pi?.charges?.data?.[0]?.billing_details?.email
-    ?? "";
+    session?.customer_details?.email ??
+    session?.metadata?.email ??
+    pi?.charges?.data?.[0]?.billing_details?.email ??
+    "";
+
+  // customerId was passed in session.metadata by startCheckout; empty string for guests
+  const customerIdMeta =
+    (session?.metadata?.customerId as string | undefined) && session?.metadata?.customerId !== ""
+      ? String(session!.metadata!.customerId)
+      : null;
 
   const currency = (session?.currency || pi?.currency || "eur") as string;
   const amount = (session?.amount_total || pi?.amount_received || 0) as number;
@@ -71,20 +85,30 @@ export async function POST(req: Request) {
 
     const { orderId } = await prisma.$transaction(async (tx) => {
       let order =
-        (await tx.order.findFirst({ where: { stripeSessionId: sessionKey }, include: { orderItems: true } })) ??
-        (await tx.order.findFirst({ where: { stripePaymentIntentId: intentId }, include: { orderItems: true } }));
+        (await tx.order.findFirst({
+          where: { stripeSessionId: sessionKey },
+          include: { orderItems: true },
+        })) ??
+        (await tx.order.findFirst({
+          where: { stripePaymentIntentId: intentId },
+          include: { orderItems: true },
+        }));
 
       if (!order) {
         if (session) {
           const built = await buildOrderFromCart(tx, session);
           if (!built) {
-            throw new Error("Missing or empty cart for Checkout session; refusing minimal order create");
+            throw new Error(
+              "Missing or empty cart for Checkout session; refusing minimal order create"
+            );
           }
           const { cart, subtotalCents } = built;
 
           order = await tx.order.create({
             data: {
-              email: session.customer_details?.email ?? email || "unknown@example.com",
+              // associate to signed-in account if available
+              customerId: customerIdMeta, // null for guest
+              email: email || "unknown@example.com",
               paymentStatus: "PAID",
               status: "PENDING",
               currency: (cart.currency ?? "EUR").toUpperCase(),
@@ -92,8 +116,8 @@ export async function POST(req: Request) {
               taxCents: 0,
               shippingCents: 0,
               totalCents: subtotalCents,
-              shippingName: cart.shippingName ?? "",
-              shippingPhone: cart.shippingPhone ?? "",
+              shippingName: cart.shippingName ?? session.customer_details?.name ?? "",
+              shippingPhone: cart.shippingPhone ?? session.customer_details?.phone ?? "",
               shippingAddr1: cart.shippingAddr1 ?? "",
               shippingAddr2: cart.shippingAddr2 ?? "",
               shippingCity: cart.shippingCity ?? "",
@@ -120,6 +144,7 @@ export async function POST(req: Request) {
           // Intent-only fallback (no session available)
           order = await tx.order.create({
             data: {
+              customerId: customerIdMeta, // best effort; usually null in PI-only flow
               email: email || "unknown@example.com",
               paymentStatus: "PAID",
               status: "PENDING",
@@ -135,24 +160,31 @@ export async function POST(req: Request) {
           });
         }
       } else {
+        // Update to PAID and attach missing identifiers if any
         order = await tx.order.update({
           where: { id: order.id },
-          data: { paymentStatus: "PAID", stripePaymentIntentId: order.stripePaymentIntentId ?? intentId },
+          data: {
+            paymentStatus: "PAID",
+            stripePaymentIntentId: order.stripePaymentIntentId ?? intentId,
+            customerId: order.customerId ?? customerIdMeta ?? undefined,
+            email: order.email || email ? email : undefined,
+          },
           include: { orderItems: true },
         });
       }
 
+      // Mark processed to ensure idempotency
       await tx.processedEvent.create({ data: { id: event.id, type: event.type } });
 
       return { orderId: order.id };
     });
 
-    // Send confirmation only for Checkout sessions, and only when the order is ready
+    // Send confirmation only for Checkout session when order is ready
     if (event.type === "checkout.session.completed") {
       try {
         const maxAttempts = 12; // ~3s
         const delayMs = 250;
-        let fresh = null as Awaited<ReturnType<typeof prisma.order.findUnique>> | null;
+        let fresh: Awaited<ReturnType<typeof prisma.order.findUnique>> | null = null;
         let ready = false;
 
         for (let i = 0; i < maxAttempts; i++) {
@@ -173,7 +205,6 @@ export async function POST(req: Request) {
 
         if (fresh?.email && fresh.id && !fresh.emailConfirmationSent) {
           if (!ready) {
-            // Not ready after retries — schedule and exit; do not send empty email
             await prisma.audit.create({
               data: {
                 id: `email-todo-${fresh.id}`,
@@ -199,7 +230,10 @@ export async function POST(req: Request) {
               shippingPost: fresh.shippingPost,
               shippingCountry: fresh.shippingCountry,
             });
-            await prisma.order.update({ where: { id: fresh.id }, data: { emailConfirmationSent: true } });
+            await prisma.order.update({
+              where: { id: fresh.id },
+              data: { emailConfirmationSent: true },
+            });
           }
         }
       } catch {

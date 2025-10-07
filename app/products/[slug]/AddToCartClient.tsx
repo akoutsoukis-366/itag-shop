@@ -1,23 +1,18 @@
-// app/products/[slug]/AddToCartClient.tsx
 "use client";
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { addToCartFromForm } from "@/app/cart/actions";
 
-export default function AddToCartClient({
-  defaultVariantId,
-}: {
-  defaultVariantId: string;
-}) {
+export default function AddToCartClient({ variantId }: { variantId: string }) {
   const [pending, startTransition] = useTransition();
   const [ok, setOk] = useState(false);
 
-  function onSubmit(formData: FormData) {
+  async function onSubmit(formData: FormData) {
     startTransition(async () => {
       try {
         await addToCartFromForm(formData);
-        setOk(true); // keep visible
+        setOk(true);
       } catch {
         setOk(false);
       }
@@ -27,7 +22,7 @@ export default function AddToCartClient({
   return (
     <div className="mt-6 flex flex-col gap-2">
       <form action={onSubmit} className="flex items-center gap-3">
-        <input type="hidden" name="variantId" value={defaultVariantId} />
+        <input type="hidden" name="variantId" value={variantId} />
         <input
           type="number"
           name="quantity"
@@ -46,15 +41,11 @@ export default function AddToCartClient({
 
       {ok && (
         <div className="text-sm text-green-700">
-          Added to cart.
+          Added to cart.{" "}
           <span className="ml-2 inline-flex gap-2">
-            <Link href="/products" className="underline">
-              Continue shopping
-            </Link>
+            <Link href="/products" className="underline">Continue shopping</Link>
             <span aria-hidden>·</span>
-            <Link href="/cart" className="underline">
-              View cart
-            </Link>
+            <Link href="/cart" className="underline">View cart</Link>
           </span>
         </div>
       )}
