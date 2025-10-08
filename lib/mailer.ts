@@ -117,3 +117,49 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
+
+export async function sendVerifyEmail(to: string, url: string) {
+  const transporter = makeTransport();
+  const from = process.env.FROM_EMAIL ?? "noreply@yourdomain.com";
+
+  const html = `
+    <div style="font-family:system-ui,Segoe UI,Roboto,sans-serif">
+      <h2>Verify your email</h2>
+      <p>Click the link below to verify your email address and activate your account:</p>
+      <p><a href="${url}">${url}</a></p>
+      <p style="color:#6b7280;font-size:12px">If you didn't request this, you can ignore this email.</p>
+    </div>
+  `;
+  const text = `Verify your email: ${url}\nIf you didn't request this, ignore this email.`;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: "Verify your email",
+    html,
+    text,
+  });
+}
+
+export async function sendPasswordReset(to: string, url: string) {
+  const transporter = makeTransport();
+  const from = process.env.FROM_EMAIL ?? "noreply@yourdomain.com";
+
+  const html = `
+    <div style="font-family:system-ui,Segoe UI,Roboto,sans-serif">
+      <h2>Reset your password</h2>
+      <p>Click the link below to set a new password:</p>
+      <p><a href="${url}">${url}</a></p>
+      <p style="color:#6b7280;font-size:12px">This link will expire soon. If you didn't request this, you can ignore this email.</p>
+    </div>
+  `;
+  const text = `Reset your password: ${url}\nThis link will expire soon. If you didn't request this, ignore this email.`;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: "Password reset",
+    html,
+    text,
+  });
+}

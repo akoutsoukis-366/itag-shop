@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { updateProfile, changePassword } from "@/app/account/actions";
-import Link from "next/link";
+import { logoutUser } from "@/app/auth/actions";
 
 export default async function ProfilePage() {
   const u = await requireUser();
@@ -14,12 +15,21 @@ export default async function ProfilePage() {
     "use server";
     await changePassword(formData);
   }
+  async function onLogout() {
+    "use server";
+    await logoutUser();
+  }
 
   return (
     <main>
-      <nav style={{ marginBottom: 12 }}>
-        <Link href="/account">← Back to account</Link>
-      </nav>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <nav style={{ marginBottom: 12 }}>
+          <Link href="/account">← Back to account</Link>
+        </nav>
+        <form action={onLogout}>
+          <button type="submit" className="underline">Sign out</button>
+        </form>
+      </div>
 
       <h1 style={{ marginBottom: 16 }}>Profile</h1>
 

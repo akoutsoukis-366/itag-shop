@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { logoutUser } from "@/app/auth/actions";
+import { deleteMyAccount } from "@/app/account/actions";
 
 export default async function AccountHome() {
   const u = await requireUser();
-  if (!u) return null; // layout redirects
+  if (!u) return null;
 
   const orders = await prisma.order.findMany({
     where: { customerId: u.id },
@@ -19,16 +21,33 @@ export default async function AccountHome() {
     },
   });
 
+  async function onLogout() {
+    "use server";
+    await logoutUser();
+  }
+
+  async function onDeleteAccount() {
+    "use server";
+    await deleteMyAccount();
+  }
+
   return (
-    <main>
-      <h1 style={{ marginBottom: 8 }}>Account</h1>
-      <div style={{ marginBottom: 16 }}>
+    <main style={{ padding: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <h1>Account</h1>
+        <form action={onLogout}>
+          <button className="underline" type="submit">Sign out</button>
+        </form>
+      </div>
+
+      <div style={{ margin: "8px 0 16px" }}>
         Signed in as <strong>{u.email}</strong>{u.name ? ` — ${u.name}` : ""}.
       </div>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
         <Link href="/account/profile" className="underline">Profile</Link>
         <Link href="/account/orders" className="underline">Orders</Link>
+        <Link href="/account/addresses" className="underline">Addresses</Link>
       </div>
 
       <h2 style={{ marginBottom: 8 }}>Recent orders</h2>
@@ -36,7 +55,7 @@ export default async function AccountHome() {
         <div>No orders yet.</div>
       ) : (
         <ul style={{ display: "grid", gap: 8 }}>
-          {orders.map(o => (
+          {orders.map((o) => (
             <li key={o.id}>
               <Link href={`/account/orders/${o.id}`} className="underline">
                 {o.id.slice(0, 12)}…
@@ -47,6 +66,13 @@ export default async function AccountHome() {
           ))}
         </ul>
       )}
+
+      <div style={{ marginTop: 24, display: "flex", gap: 12 }}>
+        <a className="underline" href="/api/account/export">Export data (JSON)</a>
+        <form action={onDeleteAccount}>
+          <button className="underline" type="submit">Delete account</button>
+        </form>
+      </div>
     </main>
   );
 }

@@ -66,3 +66,19 @@ return "path:" + path;
 export function compositeKey(parts: string[]) {
 return parts.join("|");
 }
+
+const attempts = new Map<string, { count: number; ts: number }>();
+const WINDOW_MS = 60_000;
+const MAX_ATTEMPTS = 10;
+
+export function allowAttempt(key: string) {
+  const now = Date.now();
+  const rec = attempts.get(key);
+  if (!rec || now - rec.ts > WINDOW_MS) {
+    attempts.set(key, { count: 1, ts: now });
+    return true;
+  }
+  if (rec.count >= MAX_ATTEMPTS) return false;
+  rec.count++;
+  return true;
+}
