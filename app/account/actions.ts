@@ -10,25 +10,18 @@ export async function updateProfile(formData: FormData) {
 
   const name = String(formData.get("name") || "");
   const email = String(formData.get("email") || "").trim().toLowerCase();
+  const phone = String(formData.get("phone") || "").trim() || null;
   if (!email) throw new Error("Email is required");
 
-  // Ensure email uniqueness (allow unchanged)
   const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (existing && existing.id !== u.id) throw new Error("Email already in use");
 
-  // Update profile
   await prisma.user.update({
     where: { id: u.id },
-    data: { name, email },
+    data: { name, email, phone },
   });
 
-  // Optional: If email changed, backfill any guest orders to this account
-  await prisma.order.updateMany({
-    where: { email, customerId: null },
-    data: { customerId: u.id },
-  });
-
-  redirect("/account");
+  redirect("/account/profile");
 }
 
 export async function changePassword(formData: FormData) {
@@ -49,16 +42,14 @@ export async function changePassword(formData: FormData) {
 
   const passwordHash = await hashPassword(next);
   await prisma.user.update({ where: { id: u.id }, data: { passwordHash } });
-  redirect("/account");
+  redirect("/account/profile");
 }
 
-// New: delete account server action (avoids 401 by staying in-process)
 export async function deleteMyAccount() {
   const u = await requireUser();
   if (!u) throw new Error("Unauthorized");
 
   await prisma.$transaction(async (tx) => {
-    // Preserve financial records but unlink user
     await tx.order.updateMany({ where: { customerId: u.id }, data: { customerId: null } });
     await tx.address.deleteMany({ where: { userId: u.id } }).catch(() => {});
     await tx.verificationToken.deleteMany({ where: { userId: u.id } }).catch(() => {});

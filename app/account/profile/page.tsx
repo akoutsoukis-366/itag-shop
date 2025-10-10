@@ -21,14 +21,10 @@ export default async function ProfilePage() {
   }
 
   return (
-    <main>
+    <main style={{ padding: 24, maxWidth: 760 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <nav style={{ marginBottom: 12 }}>
-          <Link href="/account">← Back to account</Link>
-        </nav>
-        <form action={onLogout}>
-          <button type="submit" className="underline">Sign out</button>
-        </form>
+        <nav><Link href="/account">← Back to account</Link></nav>
+        <form action={onLogout}><button type="submit" className="underline">Sign out</button></form>
       </div>
 
       <h1 style={{ marginBottom: 16 }}>Profile</h1>
@@ -43,6 +39,10 @@ export default async function ProfilePage() {
           <label style={{ display: "grid", gap: 6 }}>
             <span>Email</span>
             <input name="email" type="email" defaultValue={u.email} className="border px-2 py-1" />
+          </label>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span>Phone</span>
+            <input name="phone" type="tel" defaultValue={u.phone ?? ""} className="border px-2 py-1" />
           </label>
           <button className="rounded bg-black px-4 py-2 text-white" type="submit">Save</button>
         </form>

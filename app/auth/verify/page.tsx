@@ -1,8 +1,13 @@
+// app/auth/verify/page.tsx
 import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 
-export default async function VerifyPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
-  const { token } = await searchParams;
+export default async function VerifyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ token?: string; next?: string }>;
+}) {
+  const { token, next } = await searchParams;
   if (!token) return <main style={{ padding: 24 }}>Missing token.</main>;
 
   const row = await prisma.verificationToken.findUnique({ where: { token } });
@@ -11,9 +16,13 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
   }
 
   await prisma.$transaction([
-    prisma.user.update({ where: { id: row.userId }, data: { emailVerifiedAt: new Date() } }),
+    prisma.user.update({
+      where: { id: row.userId },
+      data: { emailVerifiedAt: new Date() },
+    }),
     prisma.verificationToken.delete({ where: { token } }),
   ]);
 
-  redirect("/account");
+  // After successful verification, send to login with success hint
+  redirect(`/auth/login?verified=1&next=${encodeURIComponent(next || "/")}`);
 }

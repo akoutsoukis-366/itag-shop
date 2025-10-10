@@ -6,7 +6,6 @@ import Link from "next/link";
 export default async function CheckoutDetailsPage() {
   const u = await requireUser();
 
-  // Prefill from default address if signed in
   let def:
     | {
         recipient: string;
@@ -22,9 +21,30 @@ export default async function CheckoutDetailsPage() {
   if (u) {
     const row = await prisma.address.findFirst({
       where: { userId: u.id, isDefault: true },
-      select: { recipient: true, phone: true, line1: true, line2: true, city: true, postal: true, country: true },
+      select: {
+        recipient: true,
+        phone: true,
+        line1: true,
+        line2: true,
+        city: true,
+        postal: true,
+        country: true,
+      },
     });
-    if (row) def = row;
+    // If no default address, seed defaults from user profile
+    if (row) {
+      def = row;
+    } else {
+      def = {
+        recipient: u.name ?? "",
+        phone: u.phone ?? null, // use user.phone as fallback
+        line1: "",
+        line2: null,
+        city: "",
+        postal: "",
+        country: "GR",
+      };
+    }
   }
 
   async function action(formData: FormData) {
@@ -54,6 +74,8 @@ export default async function CheckoutDetailsPage() {
               placeholder="name@example.com"
             />
           </label>
+          {/* Keep a hidden customer phone for contact-level phone if needed */}
+          <input type="hidden" name="customerPhone" value={(def?.phone ?? u?.phone ?? "") as string} />
         </fieldset>
 
         <fieldset style={{ border: "1px solid #eee", borderRadius: 6, padding: 12 }}>
@@ -73,7 +95,7 @@ export default async function CheckoutDetailsPage() {
               <input
                 name="shippingPhone"
                 className="border px-2 py-1"
-                defaultValue={def?.phone ?? ""}
+                defaultValue={def?.phone ?? u?.phone ?? ""}
               />
             </label>
             <label style={{ display: "grid", gap: 6 }}>
@@ -144,13 +166,6 @@ export default async function CheckoutDetailsPage() {
           <Link href="/cart" className="underline">Cancel</Link>
         </div>
       </form>
-
-      {u ? (
-        <div style={{ marginTop: 16 }}>
-          Prefilled from default address. Manage addresses in{" "}
-          <Link href="/account/addresses" className="underline">Account → Addresses</Link>.
-        </div>
-      ) : null}
     </main>
   );
 }

@@ -17,7 +17,20 @@ export async function requireUser() {
   const store = await cookies();
   const id = store.get(SESSION)?.value;
   if (!id) return null;
-  return prisma.user.findUnique({ where: { id }, select: { id: true, email: true, name: true, role: true } });
+  // Include phone so Profile can display it
+  return prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      phone: true, // added
+      role: true,
+      // createdAt/updatedAt optional; include if you use them elsewhere
+      // createdAt: true,
+      // updatedAt: true,
+    },
+  });
 }
 
 export async function requireAdminOrThrow() {

@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-11-20.acacia" });
 
-// Drop undefined keys so Prisma won't receive undefined for non-nullable fields
+// Remove undefined keys to avoid passing undefined to non-nullable Prisma fields
 function omitUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
   const out: Record<string, any> = {};
   for (const k of Object.keys(obj)) {
@@ -33,6 +33,24 @@ async function buildOrderFromCart(session: Stripe.Checkout.Session) {
   }, 0);
 
   return { cart, subtotalCents };
+}
+
+// Bounded retry: wait for order to be fully assembled (items present) up to maxWaitMs
+async function fetchOrderReadyByPI(intentId: string, maxWaitMs = 10000, stepMs = 500) {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    const o = await prisma.order.findFirst({
+      where: { stripePaymentIntentId: intentId },
+      include: { orderItems: true },
+    });
+    if (o) {
+      const hasItems = Array.isArray(o.orderItems) ? o.orderItems.length > 0 : true;
+      const paid = o.paymentStatus === "PAID";
+      if (paid && hasItems) return o;
+    }
+    await new Promise((r) => setTimeout(r, stepMs));
+  }
+  return null;
 }
 
 export async function POST(req: Request) {
@@ -72,21 +90,23 @@ export async function POST(req: Request) {
     pi?.charges?.data?.[0]?.billing_details?.email ??
     "";
 
+  const phone =
+    session?.customer_details?.phone ??
+    (typeof session?.metadata?.phone === "string" ? session!.metadata!.phone : null);
+
   const intentId = (session?.payment_intent || pi?.id) as string | undefined;
   const sessionId = session?.id as string | undefined;
   const currencyCode = (session?.currency || pi?.currency || "eur").toUpperCase();
   const amount = (session?.amount_total || pi?.amount_received || 0) as number;
 
-  // Option B: ALWAYS provide a non-empty session key to satisfy required stripeSessionId
+  // Provide a guaranteed non-empty session key to satisfy required stripeSessionId
   const sessionKey: string | null =
     (typeof sessionId === "string" && sessionId.length > 0 ? sessionId : null) ??
     (intentId ? `pi-${intentId}` : null);
   if (!sessionKey) {
-    // Cannot satisfy required stripeSessionId; ignore safely
     return NextResponse.json({ ignored: true });
   }
 
-  // From startCheckout metadata
   const customerIdMeta =
     (session?.metadata?.customerId as string | undefined) && session?.metadata?.customerId !== ""
       ? String(session!.metadata!.customerId)
@@ -103,6 +123,16 @@ export async function POST(req: Request) {
           if (built) {
             const { cart, subtotalCents } = built;
 
+            // Fallback shipping from Stripe session if cart fields are empty
+            const sa = session.customer_details?.address;
+            const shippingAddr1 = cart.shippingAddr1 || sa?.line1 || "";
+            const shippingAddr2 = cart.shippingAddr2 || sa?.line2 || "";
+            const shippingCity = cart.shippingCity || sa?.city || "";
+            const shippingPost = cart.shippingPost || sa?.postal_code || "";
+            const shippingCountry = cart.shippingCountry || sa?.country || "GR";
+            const shippingName = cart.shippingName || session.customer_details?.name || "";
+            const shippingPhone = cart.shippingPhone || session.customer_details?.phone || phone || "";
+
             await prisma.order.upsert({
               where: { stripePaymentIntentId: intentId },
               create: {
@@ -115,15 +145,15 @@ export async function POST(req: Request) {
                 taxCents: 0,
                 shippingCents: 0,
                 totalCents: subtotalCents,
-                shippingName: cart.shippingName ?? session.customer_details?.name ?? "",
-                shippingPhone: cart.shippingPhone ?? session.customer_details?.phone ?? "",
-                shippingAddr1: cart.shippingAddr1 ?? "",
-                shippingAddr2: cart.shippingAddr2 ?? "",
-                shippingCity: cart.shippingCity ?? "",
-                shippingPost: cart.shippingPost ?? "",
-                shippingCountry: cart.shippingCountry ?? "GR",
+                shippingName,
+                shippingPhone,
+                shippingAddr1,
+                shippingAddr2,
+                shippingCity,
+                shippingPost,
+                shippingCountry,
                 stripePaymentIntentId: intentId,
-                stripeSessionId: sessionKey, // guaranteed non-empty
+                stripeSessionId: sessionKey,
                 orderItems: {
                   create: cart.CartItem.map((ci: any) => ({
                     variantId: ci.variantId,
@@ -140,9 +170,16 @@ export async function POST(req: Request) {
               update: omitUndefined({
                 paymentStatus: "PAID",
                 status: "PENDING",
-                stripeSessionId: sessionKey, // backfill if missing
+                stripeSessionId: sessionKey,
                 customerId: customerIdMeta ?? undefined,
                 email: email || undefined,
+                shippingPhone,
+                shippingAddr1,
+                shippingAddr2,
+                shippingCity,
+                shippingPost,
+                shippingCountry,
+                shippingName,
               }),
             });
           } else {
@@ -159,7 +196,7 @@ export async function POST(req: Request) {
                 shippingCents: 0,
                 totalCents: amount,
                 stripePaymentIntentId: intentId,
-                stripeSessionId: sessionKey, // required field satisfied
+                stripeSessionId: sessionKey,
               },
               update: omitUndefined({
                 paymentStatus: "PAID",
@@ -171,7 +208,7 @@ export async function POST(req: Request) {
             });
           }
         } else {
-          // PI success without session — still must provide a session key (pi-<intent>)
+          // PI success without session
           await prisma.order.upsert({
             where: { stripePaymentIntentId: intentId },
             create: {
@@ -185,7 +222,7 @@ export async function POST(req: Request) {
               shippingCents: 0,
               totalCents: amount,
               stripePaymentIntentId: intentId,
-              stripeSessionId: sessionKey, // pi-<intentId>
+              stripeSessionId: sessionKey,
             },
             update: omitUndefined({
               paymentStatus: "PAID",
@@ -197,7 +234,7 @@ export async function POST(req: Request) {
           });
         }
       } else {
-        // Success but no PI id — rely solely on sessionKey
+        // Success but no PI id — use sessionKey
         await prisma.order.upsert({
           where: { stripeSessionId: sessionKey },
           create: {
@@ -241,7 +278,7 @@ export async function POST(req: Request) {
             shippingCents: 0,
             totalCents: amount,
             stripePaymentIntentId: intentId,
-            stripeSessionId: sessionKey, // pi-<intentId> when no real session
+            stripeSessionId: sessionKey,
           },
           update: omitUndefined({
             paymentStatus: "FAILED",
@@ -251,7 +288,6 @@ export async function POST(req: Request) {
           }),
         });
       } else {
-        // Failure with only a session id (or derived key)
         await prisma.order.upsert({
           where: { stripeSessionId: sessionKey },
           create: {
@@ -279,25 +315,15 @@ export async function POST(req: Request) {
     // Mark event processed last for idempotency
     await prisma.processedEvent.create({ data: { id: event.id, type: event.type } });
 
-    // Send confirmation only for successful Checkout session with ready data and PAID status
-    if (event.type === "checkout.session.completed" && intentId) {
+    // Email sending with bounded retry to avoid race conditions
+    if ((event.type === "checkout.session.completed" || event.type === "payment_intent.succeeded") && intentId) {
       try {
-        const fresh = await prisma.order.findFirst({
-          where: { stripePaymentIntentId: intentId },
-          include: { orderItems: true },
-        });
-        const ready =
-          !!fresh?.email &&
-          Array.isArray(fresh.orderItems) &&
-          fresh.orderItems.length > 0 &&
-          !!fresh.shippingAddr1 &&
-          fresh.paymentStatus === "PAID";
-
-        if (fresh?.email && ready && !fresh.emailConfirmationSent) {
+        const fresh = await fetchOrderReadyByPI(intentId, 10000, 500);
+        if (fresh?.email && !fresh.emailConfirmationSent) {
           await sendOrderConfirmation(fresh.email, {
             orderId: fresh.id,
             totalCents: fresh.totalCents,
-            items: fresh.orderItems.map((it) => ({
+            items: (fresh.orderItems || []).map((it) => ({
               title: it.title,
               quantity: it.quantity,
               unitCents: it.unitCents,
@@ -315,8 +341,8 @@ export async function POST(req: Request) {
             data: { emailConfirmationSent: true },
           });
         }
-      } catch {
-        // ignore email errors
+      } catch (e) {
+        console.error("sendOrderConfirmation (retry) error:", e);
       }
     }
 
